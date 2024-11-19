@@ -50,6 +50,7 @@ enum SystemState {
     IDLE,
     HOMING_X,
     HOMING_Y,
+    HOMED_WAITING,    // New state for waiting after homing
     EXECUTING_PATTERN,
     ERROR,
     CYCLE_COMPLETE
@@ -60,6 +61,7 @@ SystemState systemState = IDLE;
 bool motorsRunning = false;
 int currentSide = 0;
 int currentCommand = 0;
+bool sidesToPaint[4] = {true, true, true, true}; // Array to track which sides to paint
 
 
 // Initialize Hardware
@@ -329,19 +331,53 @@ void setup() {
     stepperRotation.setAcceleration(ROTATION_ACCEL);
     
     Serial.println(F("CNC Paint Sprayer Ready"));
-    Serial.println(F("Commands: H-Home S-Start E-Stop R-Reset"));
+    Serial.println(F("Commands:"));
+    Serial.println(F("H - Home"));
+    Serial.println(F("S - Start"));
+    Serial.println(F("E - Stop"));
+    Serial.println(F("R - Reset"));
+    Serial.println(F("12/13/14/23/24/34 etc. - Select sides to paint"));
+}
+
+void parseSideSelection(String input) {
+    // Reset all sides to false
+    for (int i = 0; i < 4; i++) {
+        sidesToPaint[i] = false;
+    }
+    
+    // Parse each character and set corresponding sides
+    for (int i = 0; i < input.length(); i++) {
+        int side = input.charAt(i) - '0';
+        if (side >= 1 && side <= 4) {
+            sidesToPaint[side-1] = true;
+        }
+    }
 }
 
 void processPattern() {
+
+
+
     if (!motorsRunning) {
+        // Find next side to paint
+        while (currentSide < 4 && !sidesToPaint[currentSide]) {
+            currentSide++;
+            currentCommand = 0;
+        }
+        
+        if (currentSide >= 4) {
+            systemState = CYCLE_COMPLETE;
+            return;
+        }
+        
         Command* currentPattern;
         int patternSize;
         
-     stepperX.setMaxSpeed(X_SPEED);
-    stepperX.setAcceleration(X_ACCEL);
-    
-    stepperY.setMaxSpeed(Y_SPEED);
-    stepperY.setAcceleration(Y_ACCEL);
+        stepperX.setMaxSpeed(X_SPEED);
+        stepperX.setAcceleration(X_ACCEL);
+        
+        stepperY.setMaxSpeed(Y_SPEED);
+        stepperY.setAcceleration(Y_ACCEL);
 
         switch(currentSide) {
             case 0:
@@ -368,9 +404,6 @@ void processPattern() {
         } else {
             currentCommand = 0;
             currentSide++;
-            if (currentSide >= 4) {
-                systemState = CYCLE_COMPLETE;
-            }
         }
     }
 }
@@ -388,39 +421,55 @@ void loop() {
     stepperRotation.run();
     
     if (Serial.available()) {
-        char cmd = Serial.read();
-        switch(cmd) {
-            case 'H':
-            case 'h':
-                if (systemState == IDLE) {
-                    systemState = HOMING_X;
+        String input = Serial.readStringUntil('\n');
+        input.trim();
+        
+        if (input.length() == 1) {
+            char cmd = input.charAt(0);
+            switch(cmd) {
+                case 'H':
+                case 'h':
+                    if (systemState == IDLE) {
+                        systemState = HOMING_X;
+                    }
+                    break;
+                    
+                case 'S':
+                case 's':
+                    if (systemState == HOMED_WAITING) {
+                        currentSide = 0;
+                        currentCommand = 0;
+                        systemState = EXECUTING_PATTERN;
+                    }
+                    break;
+                    
+                case 'E':
+                case 'e':
+                    systemState = ERROR;
+                    digitalWrite(PAINT_RELAY_PIN, HIGH);
+                    stepperX.stop();
+                    stepperY.stop();
+                    stepperRotation.stop();
+                    break;
+                    
+                case 'R':
+                case 'r':
+                    if (systemState == ERROR) {
+                        systemState = IDLE;
+                    }
+                    break;
+            }
+        } else if (input.length() >= 2) {
+            // Process side selection
+            parseSideSelection(input);
+            Serial.print(F("Selected sides to paint: "));
+            for (int i = 0; i < 4; i++) {
+                if (sidesToPaint[i]) {
+                    Serial.print(i + 1);
+                    Serial.print(" ");
                 }
-                break;
-                
-            case 'S':
-            case 's':
-                if (systemState == IDLE) {
-                    currentSide = 0;
-                    currentCommand = 0;
-                    systemState = EXECUTING_PATTERN;
-                }
-                break;
-                
-            case 'E':
-            case 'e':
-                systemState = ERROR;
-                digitalWrite(PAINT_RELAY_PIN, HIGH);
-                stepperX.stop();
-                stepperY.stop();
-                stepperRotation.stop();
-                break;
-                
-            case 'R':
-            case 'r':
-                if (systemState == ERROR) {
-                    systemState = IDLE;
-                }
-                break;
+            }
+            Serial.println();
         }
     }
     
@@ -440,10 +489,14 @@ void loop() {
         case HOMING_Y:
             if (!yHomeSensor.read()) {
                 stepperY.setCurrentPosition(0);
-                systemState = EXECUTING_PATTERN;
+                systemState = HOMED_WAITING;  // Changed to new waiting state
+                Serial.println(F("Homing complete. Enter 'S' to start painting."));
             } else if (!stepperY.isRunning()) {
                 stepperY.moveTo(-1000000);
             }
+            break;
+            
+        case HOMED_WAITING:
             break;
             
         case EXECUTING_PATTERN:
