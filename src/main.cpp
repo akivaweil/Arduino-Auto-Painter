@@ -1,3 +1,38 @@
+// # Control Commands for CNC Paint System
+
+// ### Machine Setup ###
+// HOME = "home"                    # Return paint head to origin position (0,0)
+// PRIME = "prime"                  # Prime paint gun (3-second test spray off-canvas)
+// CLEAN = "clean"                  # Flush paint gun (3-second water cycle)
+
+// ### Paint Operations ###
+// START_FULL = "start_full"        # Execute complete painting sequence
+// RUN_SIDES = "run_sides"          # Paint specific canvas sides (e.g., "13" for sides 1 and 3)
+
+// ### Paint Head Speed ###
+// # Adjust movement speed for each canvas side (1-4)
+// SPEED_SIDE_1 = "speed_1"         # Set paint head speed for side 1 (value: 1-100%)
+// SPEED_SIDE_2 = "speed_2"         # Set paint head speed for side 2 (value: 1-100%)
+// SPEED_SIDE_3 = "speed_3"         # Set paint head speed for side 3 (value: 1-100%)
+// SPEED_SIDE_4 = "speed_4"         # Set paint head speed for side 4 (value: 1-100%)
+
+// ### System Control ###
+// PAUSE = "pause"                  # Halt paint head movement and spray
+// EMERGENCY_STOP = "emergency"     # Immediate system shutdown
+//                                 # - Stops paint spray
+//                                 # - Powers off Arduino
+//                                 # - Saves current coordinates
+//                                 # - Enables position recovery for auto-resume
+
+// ### Future Integration ###
+// WEBSITE_UPDATE = "update"        # Auto-sync painted colors to tracking website
+//                                 # (Feature in development)
+
+// # Usage Examples:
+// # run_command(HOME)              # Return paint head to starting position
+// # run_command(RUN_SIDES, "13")   # Execute painting sequence for sides 1 and 3
+// # run_command(SPEED_SIDE_1, 75)  # Set paint head speed to 75% for side 1
+
 #include <AccelStepper.h>
 #include <Bounce2.h>
 
